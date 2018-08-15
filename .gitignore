@@ -102,3 +102,9 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+
+# KEF'S ADDITIONS
+*.vgm
+*.vgz
+*.out.txt

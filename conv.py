@@ -1,8 +1,8 @@
 # Some assumptions:
-# No channels disabled
+# Music is for an NTSC NES (240 ticks per second)
+# Channels are never disabled
 # No envelopes
 # No sweeps
-# Two length counter ticks per NTSC frame
 # Length counter or linear counter of 0 mutes channel, even if the counter's not enabled
 import math
 import textwrap
@@ -16,7 +16,7 @@ PULSE2 = 1
 TRI = 2
 NOISE = 3
 
-SAMPLES_PER_FRAME = 1470
+SAMPLES_PER_TICK = 184  # (approx. 240 Hz)
 
 NOISE_TBL = [100, 100, 100, 100, 90, 90, 90, 90, 80, 80, 80, 80, 70, 70, 70, 70]
 
@@ -42,8 +42,8 @@ def main(argv=None):
     channels = process_vgm(vgm_data)
 
     with open(outfilename, 'w') as f:
-        for i, channel in enumerate(channels):
-            print("*** CHANNEL", i, file=f)
+        for channel, name in zip(channels, ('SQR0', 'SQR1', 'TRI0', 'NSE0')):
+            f.write(name + "\n====\n")
             byte_list = []
             for note in channel:
                 byte_list.append(str(note.pitch))
@@ -61,6 +61,7 @@ def process_vgm(vgm_data):
     channels = [[Note(0, 0)] for i in range(4)]
     channel_regs = [[0]*4 for i in range(4)]
     reg4015 = 0
+    reg4017 = 0
     length_counters = [0]*4
     linear_counter_reload = 0
     clock = 0
@@ -79,8 +80,13 @@ def process_vgm(vgm_data):
             else:
                 wait_time = cmd - 0x70
             clock += wait_time
-            while clock >= SAMPLES_PER_FRAME:
-                # End of Redshift frame
+            while clock >= SAMPLES_PER_TICK:
+                if reg4017 & 0x40:
+                    # 5-step mode
+                    are_length_counters_clocked = clock % 5 != 4
+                else:
+                    # 4-step mode
+                    are_length_counters_clocked = true
                 for i in range(4):
                     vol = 15 if i == TRI else channel_regs[i][0] & 0x0f
                     if length_counters[i] == 0:
@@ -100,10 +106,10 @@ def process_vgm(vgm_data):
                         last_note.duration += 1
                     else:
                         channels[i].append(Note(pitch, 1))
-                    if channel_regs[i][0] & 0x80 == 0:
+                    if are_length_counters_clocked and channel_regs[i][0] & 0x80 == 0:
                         # Length counter is active; clock it
                         length_counters[i] = max(length_counters[i] - 1, 0)
-                clock -= SAMPLES_PER_FRAME
+                clock -= SAMPLES_PER_TICK
         elif cmd == 0xb4:
             # APU register write
             reg, byte = data
@@ -117,15 +123,16 @@ def process_vgm(vgm_data):
                     if byte == 0:
                         linear_counter_reload = 0
                     else:
-                        linear_counter_reload = max(((byte & 0x7f)+4)/8, 1)
+                        linear_counter_reload = byte & 0x7f
                 if chan_reg == 3:
-                    length = LENGTH_TBL[byte >> 3]
-                    length = max((length+2)/4, 1)
+                    length = LENGTH_TBL[byte >> 3] * 2
                     if chan_id == TRI:
                         length = min(length, linear_counter_reload)
                     length_counters[chan_id] = length
             elif reg == 0x15:
                 reg4015 = byte
+            elif reg == 0x17:
+                reg4017 = byte
         elif cmd == 0x66:
             # End of data
             break
