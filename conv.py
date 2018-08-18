@@ -86,7 +86,7 @@ def process_vgm(vgm_data):
                     are_length_counters_clocked = clock % 5 != 4
                 else:
                     # 4-step mode
-                    are_length_counters_clocked = true
+                    are_length_counters_clocked = True
                 for i in range(4):
                     vol = 15 if i == TRI else channel_regs[i][0] & 0x0f
                     if length_counters[i] == 0:
