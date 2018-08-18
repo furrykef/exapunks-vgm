@@ -143,9 +143,11 @@ def process_vgm(vgm_data):
 
 
 # Pitches are actually MIDI note numbers
+# We discard pitches that are too high (stops squealing in e.g. Solstice)
 def period_to_pitch(period):
     hz = 1789773/(16*(period+1))
-    return int(round(69 + 12 * math.log2(hz / 440)))
+    note_number = int(round(69 + 12 * math.log2(hz / 440)))
+    return note_number if note_number < 100 else 0
 
 
 def noise_pitch(period):
